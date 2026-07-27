@@ -69,6 +69,13 @@ sites = [
 TAG_LO_ULTIMO = "revista-vea/lo-ultimo"
 RANGO_DIAS = 7
 TOP_N = 5
+ 
+# URLs que sabemos que ya no existen (retiradas por El Espectador) y que
+# NUNCA deben publicarse, aunque el chequeo automático las marque como "vivas"
+# (por ejemplo, si el sitio las quitó hace poco y aún queda una copia en caché).
+URLS_EXCLUIDAS = {
+    "https://www.elespectador.com/revista-vea/lo-ultimo/conocida-tiktoker-fue-asesinada-por-su-esposo-dejo-una-confesion-en-video-antes-del-ataque/",
+}
 SALIDA_JSON = "vea_latest.json"
  
  
@@ -170,6 +177,9 @@ def main():
         url = it.get("item", "")
         title = it.get("title", "(sin título)")
         if not url:
+            continue
+        if url in URLS_EXCLUIDAS:
+            print("  -> %s [excluida manualmente]" % title)
             continue
         print("  -> %s" % title)
         image_url, resumen, vivo = extraer_og_image_y_descripcion(url)
