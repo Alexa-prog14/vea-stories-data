@@ -112,33 +112,52 @@ def obtener_top_lo_ultimo():
  
 IMAGEN_RESPALDO = "https://www.elespectador.com/pf/resources/images/logoShort.svg?d=1197"
  
-def extraer_og_image_y_descripcion(url, intentos=2):
+def extraer_og_image_y_descripcion(url, intentos=3):
     imagen, descripcion = "", ""
+    articulo_vivo = False
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
         "Accept-Language": "es-CO,es;q=0.9",
     }
     for intento in range(intentos):
         try:
-            r = requests.get(url, timeout=12, headers=headers)
-            m_img = re.search(r'<meta[^>]+property=["\']og:image["\'][^>]+content=["\']([^"\']+)["\']', r.text, re.I)
-            if m_img:
-                imagen = m_img.group(1)
-            m_desc = re.search(r'<meta[^>]+property=["\']og:description["\'][^>]+content=["\']([^"\']+)["\']', r.text, re.I)
-            if m_desc:
-                descripcion = m_desc.group(1)
-            if imagen:
-                break  # ya la conseguimos, no hace falta reintentar
+            r = requests.get(url, timeout=12, headers=headers, allow_redirects=True)
+            # Si el link ya no existe (retirado/dado de baja), el sitio responde
+            # con error o redirige a una página de "no encontrado".
+            if r.status_code >= 400:
+                print("  [!] Intento %d: %s respondió código %d (posible link roto/retirado)" % (intento + 1, url, r.status_code))
+                articulo_vivo = False
+            else:
+                # Marcador que SOLO aparece en la página real del artículo, no en la
+                # página genérica que el sitio sirve quando detecta un bot/scraper,
+                # ni en una página de "no encontrado".
+                articulo_vivo = 'article:published_time' in r.text or 'cXenseParse:articleid' in r.text
+                if not articulo_vivo:
+                    print("  [!] Intento %d: %s no parece ser un artículo válido (genérico, bloqueo anti-bot, o retirado)" % (intento + 1, url))
+                else:
+                    m_img = re.search(r'<meta[^>]+property=["\']og:image["\'][^>]+content=["\']([^"\']+)["\']', r.text, re.I)
+                    if m_img:
+                        imagen = m_img.group(1)
+                    m_desc = re.search(r'<meta[^>]+property=["\']og:description["\'][^>]+content=["\']([^"\']+)["\']', r.text, re.I)
+                    if m_desc:
+                        descripcion = m_desc.group(1)
+            if articulo_vivo and imagen:
+                break  # ya la conseguimos de una página válida, no hace falta reintentar
         except Exception as e:
             print("  [!] Intento %d falló para %s: %s" % (intento + 1, url, e))
-        if not imagen and intento < intentos - 1:
-            time.sleep(2)  # pequeña pausa antes de reintentar
+        if not (articulo_vivo and imagen) and intento < intentos - 1:
+            time.sleep(3)  # pequeña pausa antes de reintentar
+ 
+    if not articulo_vivo:
+        # El artículo ya no existe en vivo: no vale la pena publicarlo con un
+        # link roto. Se marca como inválido para que main() lo descarte.
+        return None, None, False
  
     if not imagen:
         print("  [!] No se pudo obtener imagen de %s tras %d intentos, uso imagen de respaldo" % (url, intentos))
         imagen = IMAGEN_RESPALDO
  
-    return imagen, descripcion
+    return imagen, descripcion, True
  
  
 def main():
@@ -153,7 +172,10 @@ def main():
         if not url:
             continue
         print("  -> %s" % title)
-        image_url, resumen = extraer_og_image_y_descripcion(url)
+        image_url, resumen, vivo = extraer_og_image_y_descripcion(url)
+        if not vivo:
+            print("     [descartada: el link ya no existe / fue retirado]")
+            continue
         notas.append({"title": title, "url": url, "image_url": image_url, "resumen": resumen})
  
     salida = {"notas": notas}
