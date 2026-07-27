@@ -1,0 +1,44 @@
+# ============================================================
+# Este archivo hace que GitHub ejecute el script automáticamente,
+# sin que nadie tenga que entrar a correrlo a mano.
+# Corre cada 6 horas, y también se puede lanzar manualmente con
+# el botón "Run workflow" en la pestaña "Actions" del repositorio.
+# ============================================================
+name: Actualizar feed Cine y Series
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"   # cada 6 horas
+  workflow_dispatch: {}       # permite el botón "Run workflow" manual
+
+permissions:
+  contents: write
+
+jobs:
+  actualizar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar el repositorio
+        uses: actions/checkout@v4
+
+      - name: Preparar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt
+
+      - name: Generar vea_cine_series.json
+        env:
+          PIANO_USERNAME: ${{ secrets.PIANO_USERNAME }}
+          PIANO_SECRET: ${{ secrets.PIANO_SECRET }}
+        run: python generar_vea_cine_series.py
+
+      - name: Publicar el archivo actualizado
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add vea_cine_series.json
+          git commit -m "Actualizar feed de Cine y Series" || echo "Sin cambios"
+          git push
